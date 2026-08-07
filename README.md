@@ -6,6 +6,8 @@ This source tree is a clean reconstruction from the preserved QTC 2.3.1 release 
 
 QTC is independent software and is not an official MeshCore client.
 
+![QTC Terminal](docs/qtc.png)
+
 ## Main behavior
 
 - One background core owns the USB serial device and SQLite database.
