@@ -2,74 +2,83 @@
 
 ## Process model
 
-One executable supports three roles:
+QTC uses one executable in three roles:
 
-1. Background core
-2. Interactive terminal client
-3. One-shot command client
+1. background core
+2. interactive terminal client
+3. one-shot command client
 
 The background core is authoritative. It owns:
 
-- the selected serial device
+- the selected USB serial device
 - MeshCore protocol parsing and command sequencing
 - the SQLite connection and all writes
-- stored-message polling
-- outgoing command queue
-- notification and sound execution
-- local client socket
+- stored-message synchronization
+- the outgoing command queue
+- desktop notification and sound execution
+- the local client socket
 
-The TUI owns only presentation and user input. Closing it does not close USB.
+The terminal UI owns presentation and user input only. Detaching the UI does not close USB or stop message handling.
 
 ## Runtime isolation
 
-Each profile has independent data, configuration, socket, lock, and PID paths. A nonblocking `flock` prevents two cores from owning one profile. The socket directory and files use restrictive permissions. Linux peer credentials reject clients belonging to another UID.
+Each profile has independent data, socket, lock, and PID state. A nonblocking `flock` prevents two cores from owning the same profile. Runtime files use restrictive permissions, and peer credentials are used to reject local clients from another UID: `SO_PEERCRED` on Linux, `getpeereid` on macOS.
 
-## IPC
+## Core/client IPC
 
-Frames use:
+Local frames use:
 
 - 4-byte little-endian payload length
 - 1-byte message type
 - typed payload
 
-State snapshots are a sequence:
+Initial state is delivered as a snapshot. Live sends, receives, acknowledgements, unread counts, settings, and connection changes use incremental updates so normal terminal activity does not block the radio path.
 
-- `STATE_BEGIN`
-- zero or more contact/channel/message/invitation frames
-- settings and status
-- `STATE_END`
-
-The core sends snapshots only after meaningful state/revision changes or explicit synchronization. Each attached TUI also reports its active conversation so the core can suppress redundant desktop notifications without suppressing terminal banners.
+The terminal reports its active conversation to the core so desktop notifications can be suppressed for an already-open chat while in-terminal message feedback remains available.
 
 ## Database
 
-SQLite uses WAL mode, foreign keys, a busy timeout, and transactional schema migration. Message deduplication is enforced by a unique stable `message_key`. Logical multipart messages share a `logical_key`; physical segment state and persistent expected-ACK mappings are stored separately so retries and late acknowledgements survive a core restart.
+QTC uses SQLite in WAL mode with foreign keys, a busy timeout, and transactional schema migrations.
 
-The QTC 2.3.1 importer renames source tables to `legacy_*_v2`, creates the new schema, imports all supported fields, and records schema version 9 in one transaction.
+The database stores contacts, aliases, favorites, channels, messages, unread state, settings, invitations, multipart state, retry state, and expected MeshCore acknowledgements. Migrations are designed to preserve existing profile data.
+
+The background core is the only database writer.
+
+## Radio session
+
+The serial connection is opened in raw, nonblocking mode. QTC begins reading the device immediately, initializes the Companion session, then allows normal interactive traffic once the radio session is ready.
+
+Protocol commands are serialized as required by the Companion protocol. Interactive sends and waiting-message retrieval take priority over background contact and channel refresh work.
+
+Asynchronous radio pushes are handled as soon as they arrive. Waiting-message notifications trigger a drain of stored messages until the radio reports that the queue is empty.
 
 ## Roster
 
-The roster model is independent from terminal rendering. It produces:
+The roster model is independent from terminal rendering.
 
-Pinned:
+Pinned content:
 
 - configured channels
-- favorite groups and favorite people
+- favorites and favorite groups
 - Contacts heading
 
-Scrollable:
+Scrollable content:
 
-- direct people
-- one-hop people
+- direct contacts
+- one-hop contacts
 - increasing hop groups
-- flood people
+- flood contacts
 
-Infrastructure node types are excluded and rendered separately.
+Repeaters and other infrastructure nodes are kept out of the normal person-contact list and displayed on the Network Nodes page.
 
 ## Terminal rendering
 
-The TUI keeps selection, search, contact scroll, history scroll, view, modal, banner, and input state separately from daemon state. A complete character frame is built in memory and emitted in one write after visible state changes. Modal transitions add a short Enter guard so the Enter that opens a confirmation cannot also activate Send.
+The TUI keeps selection, search, contact scroll, history scroll, current view, modal state, banners, and input state separate from daemon state.
+
+Frames are built in memory and written only when visible state changes. Terminal output and IPC are nonblocking so an active composer or a slow terminal cannot pause message reception.
 
 ## Protocol adapter
 
-`protocol.c` contains byte-level MeshCore framing and payload layouts. The rest of the application consumes typed `qtc_radio_event` values and does not parse serial bytes directly. Direct sends retain the firmware-provided 32-bit expected ACK and suggested timeout; the core persists that mapping, handles late ACKs, and optionally resets a stale route before a retry. Long text uses a QTC application envelope over ordinary MeshCore text frames and is reassembled above the protocol adapter.
+`src/protocol.c` contains byte-level MeshCore framing and payload layouts. The rest of QTC consumes typed radio events rather than parsing serial bytes directly.
+
+Direct-message acknowledgement state is associated with the original outgoing message so confirmation and retry state remain consistent. Long messages are split above the protocol layer and reassembled into one logical conversation message by QTC.

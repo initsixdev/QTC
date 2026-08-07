@@ -54,15 +54,13 @@ SOURCE_DATE_EPOCH: $epoch
 SQLite development version: $sqlite_version
 Database schema: 10
 MeshCore target protocol: Companion Protocol v3
-Feature flags: background-core unix-socket sqlite notifications sound banners open-chat-suppression private-channels invitations legacy-v2-import exact-ack retry-state multipart-history device-controls radio-presets export-contact-card priority-radio-queue inbox-generation receive-instance-keys delta-ipc nonblocking-live-ipc serial-burst-drain fast-inbox-fallback async-composer nonblocking-terminal-output advert-feedback
-Hardware validation: not performed in build environment; see VALIDATION.md
 MANIFEST
 
-# Copy the exact standalone binary first and test that copied artifact.
+# Copy and test the exact standalone executable that will be released.
 install -m 0755 "$BIN" "$DIST/qtc-linux-x86_64"
 QTC_BIN="$ROOT/$DIST/qtc-linux-x86_64" ./tests/demo_core_test.sh
 
-# Build a source tree without generated objects, release outputs, or repository metadata.
+# Package the exact source tree without generated objects, release outputs, or Git metadata.
 tar \
     --exclude='./build' \
     --exclude='./dist' \
@@ -73,9 +71,9 @@ tar \
     -cf - . | tar -xf - -C "$DIST/.staging/$SOURCE_NAME"
 cp "$manifest" "$DIST/.staging/$SOURCE_NAME/RELEASE-MANIFEST.txt"
 
-# Binary bundle contains the standalone executable and all operator-facing release documents.
+# Keep the binary package focused on installation, usage, build information, licensing, and privacy.
 install -m 0755 "$DIST/qtc-linux-x86_64" "$DIST/.staging/$BINARY_NAME/qtc-linux-x86_64"
-for file in README.md CHANGELOG.md BUILDING.md INSTALL-LINUX.txt VALIDATION.md CAPABILITIES.md LICENSE NOTICE.md PRIVACY.md; do
+for file in README.md CHANGELOG.md BUILDING.md LICENSE NOTICE.md PRIVACY.md; do
     cp "$file" "$DIST/.staging/$BINARY_NAME/$file"
 done
 cp "$manifest" "$DIST/.staging/$BINARY_NAME/RELEASE-MANIFEST.txt"

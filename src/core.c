@@ -5,6 +5,7 @@
 #include "qtc/ipc.h"
 #include "qtc/message.h"
 #include "qtc/notify.h"
+#include "qtc/platform.h"
 #include "qtc/protocol.h"
 #include "qtc/serial.h"
 #include "qtc/util.h"
@@ -1750,8 +1751,18 @@ static void handle_client_frame(const qtc_ipc_frame *f, void *userdata) {
 
 static void accept_clients(core_ctx *c) {
     for (;;) {
-        int fd = accept4(c->server_fd, NULL, NULL, SOCK_CLOEXEC);
+        int fd = accept(c->server_fd, NULL, NULL);
         if (fd < 0) { if (errno == EAGAIN || errno == EWOULDBLOCK) return; if (errno == EINTR) continue; return; }
+        /* BSD hands back a descriptor that inherited O_NONBLOCK from the listener
+         * while Linux does not, so the mode is set explicitly rather than assumed.
+         * send_snapshot() relies on blocking writes; an inherited O_NONBLOCK made
+         * it fail with EAGAIN part-way through a snapshot and drop the client. */
+        if (qtc_platform_prepare_fd(fd, false) != 0) { close(fd); continue; }
+        /* Darwin defaults a unix socket to an 8 KB send buffer against roughly
+         * 200 KB on Linux, which would otherwise stall the event loop on every
+         * snapshot. Failure is harmless: the write simply blocks sooner. */
+        int sndbuf = 256 * 1024;
+        (void)setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &sndbuf, sizeof(sndbuf));
         if (qtc_ipc_verify_peer_uid(fd, getuid()) != 0) { close(fd); continue; }
         int slot = -1; for (int i = 0; i < QTC_MAX_CLIENTS; i++) if (!c->clients[i].active) { slot = i; break; }
         if (slot < 0) { close(fd); continue; }

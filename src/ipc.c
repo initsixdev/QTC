@@ -1,5 +1,6 @@
 #define _GNU_SOURCE
 #include "qtc/ipc.h"
+#include "qtc/platform.h"
 #include "qtc/util.h"
 
 #include <errno.h>
@@ -109,8 +110,21 @@ int qtc_ipc_recv_blocking(int fd, qtc_ipc_frame *frame, int timeout_ms) {
     return frame->length == 0 ? 0 : read_exact_timeout(fd, frame->payload, frame->length, timeout_ms);
 }
 
+/* SOCK_CLOEXEC and SOCK_NONBLOCK are Linux extensions to socket(2); applying them
+ * afterwards behaves identically on both platforms. */
+static int unix_stream_socket(bool nonblocking) {
+    int fd = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (fd < 0) return -1;
+    if (qtc_platform_prepare_fd(fd, nonblocking) != 0) { int saved = errno; close(fd); errno = saved; return -1; }
+#ifdef SO_NOSIGPIPE
+    int on = 1;
+    (void)setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &on, sizeof(on));
+#endif
+    return fd;
+}
+
 int qtc_ipc_server_open(const char *path) {
-    int fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK, 0);
+    int fd = unix_stream_socket(true);
     if (fd < 0) return -1;
     struct sockaddr_un addr = {0}; addr.sun_family = AF_UNIX;
     if (strlen(path) >= sizeof(addr.sun_path)) { close(fd); errno = ENAMETOOLONG; return -1; }
@@ -126,7 +140,7 @@ int qtc_ipc_server_open(const char *path) {
 }
 
 int qtc_ipc_client_connect(const char *path, int timeout_ms) {
-    int fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK, 0);
+    int fd = unix_stream_socket(true);
     if (fd < 0) return -1;
     struct sockaddr_un addr = {0}; addr.sun_family = AF_UNIX;
     if (strlen(path) >= sizeof(addr.sun_path)) { close(fd); errno = ENAMETOOLONG; return -1; }
@@ -150,12 +164,8 @@ int qtc_ipc_client_connect(const char *path, int timeout_ms) {
 }
 
 int qtc_ipc_verify_peer_uid(int fd, uid_t expected_uid) {
-#ifdef SO_PEERCRED
-    struct ucred cred; socklen_t len = sizeof(cred);
-    if (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &cred, &len) != 0) return -1;
-    if (cred.uid != expected_uid) { errno = EACCES; return -1; }
+    uid_t peer = (uid_t)-1;
+    if (qtc_platform_peer_uid(fd, &peer) != 0) return -1;
+    if (peer != expected_uid) { errno = EACCES; return -1; }
     return 0;
-#else
-    (void)fd; (void)expected_uid; return 0;
-#endif
 }

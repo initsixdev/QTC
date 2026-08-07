@@ -2,6 +2,7 @@
 #include "qtc/core.h"
 #include "qtc/ipc.h"
 #include "qtc/notify.h"
+#include "qtc/platform.h"
 #include "qtc/serial.h"
 #include "qtc/tui.h"
 #include "qtc/util.h"
@@ -55,13 +56,6 @@ static int command_index(int argc, char **argv) {
         return i;
     }
     return -1;
-}
-
-static void self_path(char *out, size_t len, const char *argv0) {
-    ssize_t n = readlink("/proc/self/exe", out, len - 1);
-    if (n > 0) { out[n] = 0; return; }
-    if (realpath(argv0, out) != NULL) return;
-    qtc_strlcpy(out, argv0, len);
 }
 
 static void snapshot_frame(const qtc_ipc_frame *f, void *userdata) {
@@ -178,11 +172,7 @@ int main(int argc, char **argv) {
     if (has_arg(argc, argv, "--version")) { printf("qtc %s\n", QTC_VERSION); return 0; }
     if (has_arg(argc, argv, "--help") || has_arg(argc, argv, "-h")) { usage(stdout); return 0; }
     if (has_arg(argc, argv, "--list-devices")) return list_devices();
-    if (has_arg(argc, argv, "--print-udev-rule")) {
-        puts("# QTC / MeshCore serial access for the active desktop user");
-        puts("SUBSYSTEM==\"tty\", KERNEL==\"ttyACM[0-9]*\", TAG+=\"uaccess\", MODE=\"0660\"");
-        puts("SUBSYSTEM==\"tty\", KERNEL==\"ttyUSB[0-9]*\", TAG+=\"uaccess\", MODE=\"0660\""); return 0;
-    }
+    if (has_arg(argc, argv, "--print-udev-rule")) { puts(qtc_platform_device_access_help()); return 0; }
 
     int command_pos = command_index(argc, argv);
     const char *command = command_pos >= 0 ? argv[command_pos] : NULL;
@@ -194,7 +184,7 @@ int main(int argc, char **argv) {
     if (command && strcmp(command, "test-sound") == 0) return qtc_notify_sound() == 0 ? 0 : 1;
     if (command != NULL) { usage(stderr); return 2; }
 
-    char executable[PATH_MAX]; self_path(executable, sizeof(executable), argv[0]);
+    char executable[PATH_MAX]; qtc_platform_self_path(executable, sizeof(executable), argv[0]);
     if (qtc_core_ensure_running(executable, &paths, device, demo) != 0) {
         fprintf(stderr, "Could not start QTC background core: %s\n", strerror(errno)); return 1;
     }

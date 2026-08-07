@@ -1,33 +1,38 @@
 # MeshCore Companion Protocol notes
 
-The implementation uses the public Companion Radio Protocol and isolates it in `src/protocol.c`.
+QTC communicates with MeshCore Companion firmware using the public Companion Protocol. Byte-level framing and payload handling are isolated in `src/protocol.c`.
 
-USB framing:
+## USB framing
 
-- app to radio: `<`, little-endian uint16 payload length, payload
-- radio to app: `>`, little-endian uint16 payload length, payload
+- application to radio: `<`, little-endian `uint16` payload length, payload
+- radio to application: `>`, little-endian `uint16` payload length, payload
 
-Startup and synchronization use:
+QTC opens the serial device in raw nonblocking mode and continuously drains available radio frames.
 
-- Device Query, target protocol version 3
-- App Start, app protocol version 3
-- Get Contacts
-- Get Channel / Set Channel
-- Sync Next Message
+## Session startup
 
-Messaging uses:
+QTC initializes the Companion application session before normal messaging traffic, queries radio/device information, then performs contact, channel, and stored-message synchronization in the background.
 
-- Send Text Message with stable sender timestamp, attempt byte, six-byte destination key prefix
-- Send Channel Text Message with channel slot and sender timestamp
-- v3 direct/channel receive frames
-- message-waiting push
-- send-confirmed push
+Only one request/response transaction is active at a time, while asynchronous firmware pushes can be received at any point.
 
-The protocol constants and byte layouts were checked against the MeshCore project Companion Radio Protocol documentation available on 2026-08-06 and against the preserved QTC 2.3.1 binary's observable command/database strings.
+## Messaging
 
-Upstream documentation:
+QTC uses the Companion protocol operations for:
 
-https://docs.meshcore.io/companion_protocol/
-https://github.com/meshcore-dev/MeshCore/wiki/Companion-Radio-Protocol
+- direct text messages
+- channel text messages
+- stored-message synchronization
+- message-waiting notifications
+- direct-message delivery confirmations
+- contact and channel synchronization
+- radio settings and self advertisements
+- export of the radio's own contact information
 
-The upstream wiki warns that its old embedded copy may be outdated. Real firmware compatibility testing remains part of the release checklist.
+Waiting-message pushes trigger immediate stored-message retrieval until the radio reports that no messages remain. Interactive sends and receive work are prioritized over background roster refreshes.
+
+## Upstream documentation
+
+- https://docs.meshcore.io/companion_protocol/
+- https://github.com/meshcore-dev/MeshCore/wiki/Companion-Radio-Protocol
+
+Protocol compatibility should be checked against current MeshCore firmware when the upstream Companion protocol changes.

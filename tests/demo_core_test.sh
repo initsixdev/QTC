@@ -2,7 +2,11 @@
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-QTC_BIN=${QTC_BIN:-"$ROOT/build/qtc-linux-x86_64"}
+case $(uname -s) in
+    Darwin) DEFAULT_OS_TAG=macos ;;
+    *) DEFAULT_OS_TAG=linux ;;
+esac
+QTC_BIN=${QTC_BIN:-"$ROOT/build/qtc-${DEFAULT_OS_TAG}-$(uname -m)"}
 TMP=$(mktemp -d /tmp/qtc-demo-core-test-XXXXXX)
 CORE_PID=""
 

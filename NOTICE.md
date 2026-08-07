@@ -1,7 +1,7 @@
 # Third-party and interoperability notice
 
-QTC Messenger interoperates with MeshCore Companion firmware through the publicly documented MeshCore Companion Protocol.
+QTC interoperates with MeshCore Companion firmware through the publicly documented MeshCore Companion Protocol.
 
-MeshCore is an independent project. QTC Messenger is not an official MeshCore client and must not imply endorsement or use MeshCore branding assets without permission.
+MeshCore is an independent project. QTC is not an official MeshCore client and is not affiliated with or endorsed by the MeshCore project.
 
-Relevant upstream projects include MeshCore firmware and reference Companion clients distributed under the MIT License. This codebase implements protocol constants, framing, and packet layouts independently from the public specification; no upstream source files are bundled in this release candidate.
+QTC implements the protocol needed for interoperability with MeshCore Companion firmware. MeshCore names and trademarks belong to their respective owners.
