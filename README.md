@@ -43,7 +43,7 @@ qtc --device /dev/cu.usbmodem1101    # macOS
 
 Automatic detection looks for `/dev/serial/by-id/*`, `/dev/ttyACM*`, and `/dev/ttyUSB*` on Linux, and for `/dev/cu.usbmodem*`, `/dev/cu.usbserial*`, `/dev/cu.wchusbserial*`, and `/dev/cu.SLAB_USBtoUART*` on macOS. Bluetooth and debug serial ports are never offered.
 
-macOS needs no permission step: a connected radio's `/dev/cu.*` node already belongs to the logged-in user. Some USB-serial bridges need their vendor driver installed before the node appears at all.
+macOS needs no permission step: a connected radio's `/dev/cu.*` node already belongs to the logged-in user. The matching `/dev/tty.*` node is deliberately ignored, because it blocks on carrier detect and is the wrong device for a modem-style radio. Some USB-serial bridges need their vendor driver installed before the node appears at all.
 
 If Linux denies access to the serial device, add your user to the serial-access group used by your distribution:
 
@@ -170,6 +170,12 @@ Arch Linux:
 
 ```sh
 sudo pacman -S libnotify pipewire-audio
+```
+
+Set `QTC_SOUND_FILE` to choose the notification sound:
+
+```sh
+export QTC_SOUND_FILE=/System/Library/Sounds/Submarine.aiff
 ```
 
 ## Command line

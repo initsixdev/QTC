@@ -128,10 +128,13 @@ Full pass: README positioning plus its build, device, notification, and clipboar
 sections; BUILDING.md requirements, per-OS flags, and binary names; and a new
 `INSTALL-MACOS.txt`.
 
-Superseded after approval: the platform notes written into CAPABILITIES.md and the
-per-OS hardware checks written into VALIDATION.md were removed along with those
-files, which were deleted from the repository as historical release material. The
-surviving macOS hardware caveats live in README.md and INSTALL-MACOS.txt.
+Superseded after approval. CAPABILITIES.md and VALIDATION.md were deleted from the
+repository as historical release material, taking the platform notes and per-OS
+hardware checks written into them. INSTALL-MACOS.txt was then deleted too, once the
+1.0.0 documentation cleanup had folded installation guidance into README.md for both
+platforms; its unique content, the `QTC_SOUND_FILE` override and the reason callout
+devices are preferred over `tty.*`, moved to README.md rather than being lost.
+README.md is now the single installation and platform document.
 
 ## Testing
 
