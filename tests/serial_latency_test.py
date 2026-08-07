@@ -7,6 +7,7 @@ import ctypes
 from collections import deque
 import fcntl
 import os
+import platform
 import pty
 import select
 import shutil
@@ -33,6 +34,14 @@ QTC_MSG_INCOMING = 0
 QTC_MSG_OUTGOING = 1
 QTC_MSG_QUEUED = 0
 QTC_MSG_DELIVERED = 3
+
+# The budgets below describe an optimized binary. A sanitizer build cannot meet
+# them: the SQLite-backed inbox path runs roughly twenty times slower under
+# ASan+UBSan, so a 24-message burst drain measures about 6.6 s against a 0.3 s
+# optimized baseline. The sanitize target sets QTC_TIMING_SCALE for its
+# instrumented pass only, so that pass still proves no message is lost while the
+# optimized run that follows it enforces the real budgets unchanged.
+TIMING_SCALE = float(os.environ.get("QTC_TIMING_SCALE") or 1)
 
 
 class Message(ctypes.Structure):
@@ -345,8 +354,13 @@ def wait_for_status(sock: socket.socket, needle: str, timeout: float) -> None:
     raise TimeoutError(f"did not receive status containing {needle!r}")
 
 
+def default_binary() -> str:
+    tag = "macos" if platform.system() == "Darwin" else "linux"
+    return f"./build/qtc-{tag}-{platform.machine()}"
+
+
 def main() -> None:
-    binary = os.environ.get("QTC_BIN", "./build/qtc-linux-x86_64")
+    binary = os.environ.get("QTC_BIN", default_binary())
     root = tempfile.mkdtemp(prefix="qtc-latency-")
     env = os.environ.copy()
     env["XDG_DATA_HOME"] = os.path.join(root, "data")
@@ -404,13 +418,13 @@ def main() -> None:
         if not simulator.send_seen.wait(0.40):
             raise AssertionError("direct message did not reach serial within 400 ms")
         serial_latency = simulator.send_seen_at - started
-        if serial_latency > 0.25:
+        if serial_latency > 0.25 * TIMING_SCALE:
             raise AssertionError(f"serial send latency was {serial_latency * 1000:.1f} ms")
 
         delivered_at = wait_for_message(client, direct_text, QTC_MSG_OUTGOING,
                                         QTC_MSG_DELIVERED, 1.0)
         confirmation_latency = delivered_at - started
-        if confirmation_latency > 0.50:
+        if confirmation_latency > 0.50 * TIMING_SCALE:
             raise AssertionError(
                 f"local delivered confirmation took {confirmation_latency * 1000:.1f} ms"
             )
@@ -420,7 +434,7 @@ def main() -> None:
         incoming_at = wait_for_message(client, incoming_text, QTC_MSG_INCOMING,
                                        None, 1.0)
         receive_latency = incoming_at - incoming_started
-        if receive_latency > 0.50:
+        if receive_latency > 0.50 * TIMING_SCALE:
             raise AssertionError(f"incoming delivery took {receive_latency * 1000:.1f} ms")
 
         # A companion push should be the normal path, but a missed push must not
@@ -430,7 +444,7 @@ def main() -> None:
         fallback_at = wait_for_message(client, fallback_text, QTC_MSG_INCOMING,
                                        None, 1.0)
         fallback_latency = fallback_at - fallback_started
-        if fallback_latency > 0.60:
+        if fallback_latency > 0.60 * TIMING_SCALE:
             raise AssertionError(
                 f"fallback inbox delivery took {fallback_latency * 1000:.1f} ms"
             )
@@ -447,7 +461,7 @@ def main() -> None:
         simulator.release_empty_response.set()
         raced_at = wait_for_message(client, raced_text, QTC_MSG_INCOMING,
                                     None, 1.0)
-        if raced_at - raced_started > 0.60:
+        if raced_at - raced_started > 0.60 * TIMING_SCALE:
             raise AssertionError("message-waiting/empty-response race was too slow")
 
         # One waiting notification can represent many queued radio messages.
@@ -458,7 +472,7 @@ def main() -> None:
             simulator.queue_incoming(f"burst message {index:02d}", announce=False)
         simulator.send(bytes([0x83]))
         remaining = {f"burst message {index:02d}" for index in range(burst_count)}
-        deadline = time.monotonic() + 2.0
+        deadline = time.monotonic() + 2.0 * TIMING_SCALE
         while remaining and time.monotonic() < deadline:
             frame_type, payload = ipc_recv(client, max(0.01, deadline - time.monotonic()))
             if frame_type != QTC_IPC_MESSAGE or len(payload) != ctypes.sizeof(Message):
@@ -468,7 +482,7 @@ def main() -> None:
                 remaining.discard(c_string(bytes(message.text)))
         if remaining:
             raise AssertionError(f"inbox burst lost messages: {sorted(remaining)!r}")
-        if time.monotonic() - burst_started > 2.0:
+        if time.monotonic() - burst_started > 2.0 * TIMING_SCALE:
             raise AssertionError("inbox burst drain was too slow")
 
         # The wire protocol has only second-resolution timestamps. Two equal
@@ -531,7 +545,7 @@ def main() -> None:
             raise AssertionError("incoming redraw erased the unsent compose draft")
         if "NEW" not in screen[ROWS - 2]:
             raise AssertionError("compose mode did not show the incoming-message banner")
-        if compose_latency > 1.0:
+        if compose_latency > 1.0 * TIMING_SCALE:
             raise AssertionError(
                 f"compose-mode display took {compose_latency * 1000:.1f} ms"
             )

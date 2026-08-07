@@ -1,5 +1,6 @@
 #define _GNU_SOURCE
 #include "qtc/util.h"
+#include "qtc/platform.h"
 
 #include <ctype.h>
 #include <errno.h>
@@ -10,7 +11,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
-#include <sys/random.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -228,20 +228,7 @@ int qtc_write_file_atomic(const char *path, const void *data, size_t len, mode_t
 int qtc_secure_random(void *buf, size_t len) {
     uint8_t *p = buf;
     size_t off = 0;
-    while (off < len) {
-        ssize_t n = getrandom(p + off, len - off, 0);
-        if (n < 0) {
-            if (errno == EINTR) {
-                continue;
-            }
-            if (errno != ENOSYS) {
-                return -1;
-            }
-            break;
-        }
-        off += (size_t)n;
-    }
-    if (off == len) {
+    if (qtc_platform_secure_random(p, len) == 0) {
         return 0;
     }
     int fd = open("/dev/urandom", O_RDONLY | O_CLOEXEC);
@@ -386,19 +373,7 @@ int qtc_spawn_detached(char *const argv[]) {
 
 int qtc_process_is_alive(pid_t pid, uid_t expected_uid) {
     if (pid <= 1 || kill(pid, 0) != 0) return 0;
-    char path[64];
-    (void)snprintf(path, sizeof(path), "/proc/%ld/status", (long)pid);
-    FILE *f = fopen(path, "r");
-    if (f == NULL) return 0;
-    char line[256];
     uid_t real_uid = (uid_t)-1;
-    while (fgets(line, sizeof(line), f) != NULL) {
-        unsigned long uid = 0;
-        if (sscanf(line, "Uid:\t%lu", &uid) == 1) {
-            real_uid = (uid_t)uid;
-            break;
-        }
-    }
-    fclose(f);
+    if (qtc_platform_process_uid(pid, &real_uid) != 0) return 0;
     return real_uid == expected_uid;
 }

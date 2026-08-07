@@ -3,6 +3,7 @@
 
 import fcntl
 import os
+import platform
 import pty
 import re
 import select
@@ -87,8 +88,13 @@ def read_available(master: int, duration: float) -> bytes:
     return bytes(output)
 
 
+def default_binary() -> str:
+    tag = "macos" if platform.system() == "Darwin" else "linux"
+    return f"./build/qtc-{tag}-{platform.machine()}"
+
+
 def main() -> None:
-    binary = os.environ.get("QTC_BIN", "./build/qtc-linux-x86_64")
+    binary = os.environ.get("QTC_BIN", default_binary())
     runtime_root = tempfile.mkdtemp(prefix="qtc-tui-runtime-")
     data_root = tempfile.mkdtemp(prefix="qtc-tui-data-")
     profile = f"smoke-{os.getpid()}"

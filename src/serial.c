@@ -68,7 +68,13 @@ static bool device_exists(const char *path) { struct stat st; return stat(path, 
 int qtc_serial_list_devices(char devices[][QTC_MAX_PATH], size_t max, size_t *count) {
     if (count == NULL) return -1;
     *count = 0;
-    const char *patterns[] = {"/dev/serial/by-id/*", "/dev/ttyACM*", "/dev/ttyUSB*"};
+    /* One list for both platforms: a pattern that cannot match on the running
+     * system simply contributes nothing. macOS entries name callout (cu.*)
+     * devices only - the matching tty.* node blocks on carrier detect and is the
+     * wrong device for a modem-style radio. */
+    const char *patterns[] = {"/dev/serial/by-id/*", "/dev/ttyACM*", "/dev/ttyUSB*",
+                              "/dev/cu.usbmodem*", "/dev/cu.usbserial*",
+                              "/dev/cu.wchusbserial*", "/dev/cu.SLAB_USBtoUART*"};
     for (size_t p = 0; p < QTC_ARRAY_LEN(patterns); p++) {
         glob_t g = {0}; int rc = glob(patterns[p], 0, NULL, &g);
         if (rc == GLOB_NOMATCH) { globfree(&g); continue; }

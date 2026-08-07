@@ -184,7 +184,8 @@ static int copy_to_clipboard(const char *text) {
     static const char *commands[] = {
         "wl-copy 2>/dev/null",
         "xclip -selection clipboard 2>/dev/null",
-        "xsel --clipboard --input 2>/dev/null"
+        "xsel --clipboard --input 2>/dev/null",
+        "pbcopy 2>/dev/null"
     };
     if (text == NULL || *text == 0) return -1;
     for (size_t i = 0; i < QTC_ARRAY_LEN(commands); i++) {
@@ -399,7 +400,7 @@ static void ipc_frame(const qtc_ipc_frame *f, void *userdata) {
                 if (copy_to_clipboard(p->text) == 0)
                     qtc_strlcpy(t->status, "MeshCore contact card copied to clipboard", sizeof(t->status));
                 else
-                    qtc_strlcpy(t->status, "Install wl-clipboard, xclip, or xsel to copy the contact card", sizeof(t->status));
+                    qtc_strlcpy(t->status, "Install wl-clipboard, xclip, or xsel to copy the contact card (pbcopy on macOS)", sizeof(t->status));
                 t->dirty = true;
             }
             break;
@@ -885,7 +886,7 @@ static void normal_key(tui_ctx *t, unsigned char c) {
         else if (c == 'r') (void)qtc_ipc_send(t->fd, QTC_IPC_DEVICE_RECONNECT, NULL, 0);
         else if (c == 'n') {
             int rc = qtc_notify_desktop("QTC notification test", "Desktop notifications are working");
-            qtc_strlcpy(t->status, rc == 0 ? "Desktop notification test sent" : "notify-send is unavailable or failed", sizeof(t->status));
+            qtc_strlcpy(t->status, rc == 0 ? "Desktop notification test sent" : "No desktop notification helper is available", sizeof(t->status));
             t->dirty = true;
         } else if (c == 'a') {
             int rc = qtc_notify_sound();
