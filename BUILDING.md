@@ -2,57 +2,69 @@
 
 ## Requirements
 
-- Linux x86-64 with glibc for the current release target
+One source tree builds native executables for Linux x86-64 with glibc and for macOS.
+
+Build requirements:
+
 - C11 compiler (`gcc` or `clang`)
 - GNU Make
 - SQLite 3 development headers and library
-- `tar`, `sha256sum`, and standard POSIX shell tools for packaging
+- standard POSIX shell tools
+- `tar` and `sha256sum` for release packaging, which is Linux-only
 
-## Normal build
+Fedora:
+
+```sh
+sudo dnf install gcc make sqlite-devel
+```
+
+Debian or Ubuntu:
+
+```sh
+sudo apt install build-essential libsqlite3-dev
+```
+
+macOS:
+
+```sh
+xcode-select --install
+```
+
+The macOS SDK supplies SQLite 3, so nothing else is needed.
+
+## Build
 
 ```sh
 make clean
 make
 ```
 
-Output:
+The Makefile selects platform settings from `uname` and names the output for the host:
 
 ```text
 build/qtc-linux-x86_64
+build/qtc-macos-arm64
 ```
 
-The default release compile flags are:
+The default build uses strict warnings and common hardening flags. Compile flags are
+shared by both platforms; preprocessor and linker settings differ, because Darwin
+hides `flock`, `LOCK_*`, and `MSG_DONTWAIT` behind `_POSIX_C_SOURCE` and the Apple
+linker rejects `-Wl,-z,...`:
 
 ```text
--std=c11 -O2 -g -Wall -Wextra -Wpedantic -Werror
--fstack-protector-strong -D_FORTIFY_SOURCE=2
-```
-
-Default linker hardening:
-
-```text
--Wl,-z,relro,-z,now
+Linux    -D_POSIX_C_SOURCE=200809L   -Wl,-z,relro,-z,now
+macOS    -D_DARWIN_C_SOURCE          -Wl,-dead_strip
 ```
 
 ## Tests
 
-Run unit and integration tests:
+Run the complete test suite:
 
 ```sh
 make test
 ```
 
-The test target includes:
-
-- new-database migration and deduplication
-- exact QTC 2.3.1 schema migration, including retrying the migration
-- invitation URI/raw-key/message validation
-- IPC framing and parsing
-- MeshCore serial/protocol framing, message layouts, exact ACKs, route-reset, preset, and contact-export encoding
-- UTF-8 multipart splitting and logical-message reassembly
-- roster grouping, favorites, aliases, groups, flood ordering, and search
-- background core startup, attach/status, create/invite/rotate/leave/join, and clean shutdown in demo mode
-- pseudo-terminal Enter-to-write, favorite stability, alias/group editing, raw-key join, long-message history, themes, presets, clipboard export, paging, and device controls
+The suite covers the database, message deduplication and multipart handling, invitations, IPC, MeshCore framing and command encoding, roster/search behavior, background-core lifecycle, and terminal interaction.
 
 ## Sanitizers
 
@@ -60,7 +72,13 @@ The test target includes:
 make sanitize
 ```
 
-This builds and runs the suite with AddressSanitizer and UndefinedBehaviorSanitizer, then cleans and rebuilds a normal hardened release binary. The command deliberately leaves a non-sanitized binary in `build/` afterward.
+This runs the suite with AddressSanitizer and UndefinedBehaviorSanitizer, then rebuilds the normal executable.
+
+The instrumented pass runs with `QTC_TIMING_SCALE=10`. Sanitizers slow the
+SQLite-backed inbox path by roughly twenty times, which no latency budget tuned for an
+optimized binary can absorb; a 24-message burst drain measures about 6.6 s against a
+0.3 s optimized baseline. That pass still proves no message is lost, and the optimized
+rebuild that follows it re-runs the same tests at the real budgets.
 
 ## Full release check
 
@@ -68,9 +86,14 @@ This builds and runs the suite with AddressSanitizer and UndefinedBehaviorSaniti
 make release-check
 ```
 
-This performs a clean hardened build, the full test suite, sanitizer testing, and a final normal rebuild.
+This performs a clean build, tests, sanitizer validation, and a final normal build.
 
 ## Package release artifacts
+
+Release packaging runs on Linux only. It depends on GNU `sha256sum`, `tar --sort` and
+`--owner`, `date -d`, and `ld --version`, none of which behave the same way on macOS.
+`make package` stops with an explanatory error there. A macOS build is produced with
+`make` and installed with `make install`.
 
 ```sh
 make package
@@ -86,7 +109,7 @@ Artifacts are written to `dist/`:
 - `RELEASE-MANIFEST.txt`
 - `SHA256SUMS`
 
-The package script tests the exact copied standalone binary in demo-core integration mode before generating checksums.
+`dist/` is generated output and should not be committed to Git.
 
 ## Reproducible archive metadata
 
@@ -96,9 +119,7 @@ Set `SOURCE_DATE_EPOCH` to normalize archive timestamps:
 SOURCE_DATE_EPOCH=1786032000 make package
 ```
 
-When a Git commit exists, the package script uses its commit timestamp by default. Otherwise it uses the current time.
-
-The C compiler output itself may still vary across compiler, linker, libc, and SQLite development versions. The release manifest records those inputs.
+When the source is inside a Git repository, the package script uses the current commit timestamp by default. Compiler output can still vary across compiler, linker, libc, and SQLite versions; the generated release manifest records the relevant build inputs.
 
 ## Install
 
@@ -108,7 +129,7 @@ System-wide under `/usr/local/bin`:
 sudo make install
 ```
 
-Staged package install:
+Staged installation:
 
 ```sh
 make DESTDIR=/tmp/qtc-package-root install
@@ -124,8 +145,10 @@ make test CC=clang
 
 ## Debug logging
 
+Run QTC in demo mode with debug logging:
+
 ```sh
-./build/qtc-linux-x86_64 --debug --demo
+./build/qtc-linux-x86_64 --debug --demo   # or ./build/qtc-macos-arm64
 ```
 
-Do not publish debug logs without reviewing them for contacts, messages, device paths, or channel-related data.
+When using a real radio, debug output may contain contact names, message metadata, or device paths. Review logs before sharing them publicly.
