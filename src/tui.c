@@ -101,7 +101,7 @@ typedef struct {
 
 static const radio_preset RADIO_PRESETS[] = {
     {"Europe / UK", 867.500, 250.0, 10, 5},
-    {"Europe / UK narrow", 869.525, 62.5, 8, 5},
+    {"Europe / UK narrow", 869.618, 62.5, 8, 5},
     {"USA / Canada", 910.525, 62.5, 7, 5},
     {"Australia / New Zealand", 915.800, 250.0, 10, 5}
 };
