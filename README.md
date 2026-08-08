@@ -18,25 +18,35 @@ QTC requires a MeshCore-compatible device connected over USB.
 
 The device will usually appear as:
 
+```sh
 /dev/ttyACM0
+```
 
 or:
 
+```sh
 /dev/ttyUSB0
+```
 
 Check that it is detected:
 
+```sh
 ls -l /dev/ttyACM* /dev/ttyUSB* 2>/dev/null
+```
 
 On most Linux distributions, your user must be a member of the dialout group to access USB serial devices:
 
+```sh
 sudo usermod -aG dialout "$USER"
+```
 
 Then log out completely and log back in for the new group membership to take effect.
 
 Verify with:
 
+```sh
 groups
+```
 
 dialout should appear in the list.
 
@@ -44,25 +54,11 @@ Reconnect the MeshCore device and run QTC normally. Do not run QTC with sudo.
 
 If your distribution does not use the dialout group, check which group owns the serial device:
 
+```sh
 ls -l /dev/ttyACM0
+```
 
 and add your user to that group instead.
-
-### macOS
-
-No dialout group configuration is normally required on macOS.
-
-Connected USB serial devices typically appear as:
-
-/dev/cu.usbmodem*
-
-or:
-
-/dev/cu.usbserial*
-
-List available serial devices with:
-
-ls /dev/cu.*
 
 Connect the MeshCore device before starting QTC. QTC should run as your normal user; sudo is not normally required.
 Download `qtc-linux-x86_64` from the [latest GitHub release](https://github.com/initsixdev/QTC/releases/latest), then:
